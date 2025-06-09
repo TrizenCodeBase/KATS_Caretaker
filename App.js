@@ -11,6 +11,7 @@ import RoutesScreen from "./screens/RoutesScreen";
 import RouteDetailsScreen from "./screens/RouteDetailsScreen";
 import KidDetailsScreen from "./screens/KidDetailsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
+import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -51,6 +52,11 @@ export default function App() {
         <Stack.Screen
           name="Login"
           component={LoginScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ForgotPassword"
+          component={ForgotPasswordScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen
