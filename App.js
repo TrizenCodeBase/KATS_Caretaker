@@ -12,6 +12,7 @@ import RouteDetailsScreen from "./screens/RouteDetailsScreen";
 import KidDetailsScreen from "./screens/KidDetailsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
+import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -32,7 +33,10 @@ function MainTabs() {
 
           return <Ionicons name={icon} size={size} color={color} />;
         },
-        tabBarActiveTintColor: "#3B82F6",
+        tabBarActiveTintColor: "#2A2A72",
+        tabBarStyle: {
+          backgroundColor: "white",
+        },
         tabBarInactiveTintColor: "gray",
         headerShown: false,
       })}
@@ -57,6 +61,11 @@ export default function App() {
         <Stack.Screen
           name="ForgotPassword"
           component={ForgotPasswordScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ResetPassword"
+          component={ResetPasswordScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen

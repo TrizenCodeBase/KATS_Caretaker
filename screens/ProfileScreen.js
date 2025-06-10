@@ -9,11 +9,16 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  SafeAreaView,
+  Platform,
+  Dimensions,
 } from "react-native";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+
+const { width } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const [editMode, setEditMode] = useState(false);
@@ -345,345 +350,485 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
-      <View style={styles.header}>
-        <View style={styles.profileImageContainer}>
-          {formData.profilePicture ? (
-            <Image 
-              source={{ uri: formData.profilePicture }} 
-              style={styles.profileImage} 
-            />
-          ) : (
-            <View style={styles.profileImagePlaceholder}>
-              <MaterialIcons name="person" size={40} color="#A020F0" />
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View style={styles.profileSection}>
+              <View style={styles.profileImageContainer}>
+                {formData.profilePicture ? (
+                  <Image 
+                    source={{ uri: formData.profilePicture }} 
+                    style={styles.profileImage}
+                  />
+                ) : (
+                  <View style={styles.profileImagePlaceholder}>
+                    <MaterialIcons name="person" size={44} color="#2C2A7C" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.profileName}>{formData.name || "Guest User"}</Text>
+                <View style={styles.roleBadgeContainer}>
+                  <MaterialIcons name="verified-user" size={16} color="#FFFFFF" style={styles.roleIcon} />
+                  <Text style={styles.roleBadge}>CARETAKER</Text>
+                </View>
+              </View>
             </View>
-          )}
-          <Text style={styles.profileName}>{formData.name || "Guest User"}</Text>
-          <View style={styles.roleBadgeContainer}>
-        <Text style={styles.roleBadge}>{formData.role.toUpperCase()}</Text>
           </View>
         </View>
-      </View>
 
-      <View style={styles.contentContainer}>
-        {/* Personal Information Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
-        {[
-            ["Name", "name", "person"],
-            ["Email", "email", "email"],
-            ["Phone Number", "phone", "phone"],
-            ["Alternate Number", "alternatePhone", "phone-iphone"],
-            ["Date of Birth", "dob", "cake"],
-          ].map(([label, field, icon]) => (
-          <View key={field} style={styles.infoSection}>
-              <View style={styles.labelContainer}>
-                <MaterialIcons name={icon} size={20} color="#A020F0" style={styles.icon} />
-            <Text style={styles.label}>{label}</Text>
-              </View>
-              {editMode && isAuthenticated ? (
-              <TextInput
-                style={styles.input}
-                value={formData[field]}
-                onChangeText={(text) => handleInputChange(field, text)}
-                  placeholder={`Enter your ${label.toLowerCase()}`}
-                  editable={isAuthenticated}
+        <View style={styles.contentContainer}>
+          {/* Quick Actions */}
+          {isAuthenticated && (
+            <View style={styles.quickActions}>
+              <TouchableOpacity 
+                style={[styles.actionButton, editMode ? styles.saveActionButton : styles.editActionButton]} 
+                onPress={toggleEditMode}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons 
+                  name={editMode ? "check-circle" : "edit"} 
+                  size={22} 
+                  color={editMode ? "#FFFFFF" : "#2C2A7C"} 
                 />
-              ) : (
-                <Text style={[styles.value, !isAuthenticated && styles.placeholderText]}>
-                  {formData[field] || `No ${label.toLowerCase()} provided`}
+                <Text style={[styles.actionButtonText, editMode && styles.saveActionButtonText]}>
+                  {editMode ? "Save Changes" : "Edit Profile"}
                 </Text>
-              )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Personal Information Section */}
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="person-outline" size={24} color="#2C2A7C" />
+            <Text style={styles.sectionTitle}>Personal Information</Text>
+          </View>
+
+          {[
+            ["Name", "name", "person"],
+            ["Email Address", "email", "email"],
+            ["Phone Number", "phone", "phone"],
+            ["Alternate Phone", "alternatePhone", "phone-iphone"],
+            ["Date of Birth", "dob", "event"],
+          ].map(([label, field, icon], index) => (
+            <View key={field} style={[styles.card, { marginBottom: 12 }]}>
+              <View style={styles.cardContent}>
+                <View style={styles.iconContainer}>
+                  <MaterialIcons name={icon} size={24} color="#2C2A7C" />
+                </View>
+                <View style={styles.fieldContent}>
+                  <Text style={styles.fieldLabel}>{label}</Text>
+                  {editMode && isAuthenticated ? (
+                    <TextInput
+                      style={styles.input}
+                      value={formData[field]}
+                      onChangeText={(text) => handleInputChange(field, text)}
+                      placeholder={`Enter your ${label.toLowerCase()}`}
+                      placeholderTextColor="#A0A0A0"
+                      editable={isAuthenticated}
+                    />
+                  ) : (
+                    <Text style={styles.fieldValue}>
+                      {formData[field] || `No ${label.toLowerCase()} provided`}
+                    </Text>
+                  )}
+                </View>
+              </View>
             </View>
           ))}
-        </View>
 
-        {/* Address Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Address Details</Text>
-          <View style={styles.infoSection}>
-            <View style={styles.labelContainer}>
-              <MaterialIcons name="location-on" size={20} color="#A020F0" style={styles.icon} />
-              <Text style={styles.label}>Address</Text>
-            </View>
-            {editMode && isAuthenticated ? (
-              <TextInput
-                style={[styles.input, styles.multilineInput]}
-                value={formData.address}
-                onChangeText={(text) => handleInputChange('address', text)}
-                placeholder="Enter your address"
-                multiline
-                numberOfLines={3}
-                editable={isAuthenticated}
-              />
-            ) : (
-              <Text style={[styles.value, !isAuthenticated && styles.placeholderText]}>
-                {formData.address || "No address provided"}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Documents Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Documents</Text>
-          <View style={styles.infoSection}>
-            <View style={styles.labelContainer}>
-              <MaterialIcons name="credit-card" size={20} color="#A020F0" style={styles.icon} />
-              <Text style={styles.label}>Aadhar Number</Text>
-            </View>
-            {editMode && isAuthenticated ? (
-              <TextInput
-                style={styles.input}
-                value={formData.aadhar}
-                onChangeText={(text) => handleInputChange('aadhar', text)}
-                placeholder="Enter your Aadhar number"
-                editable={isAuthenticated}
-                keyboardType="numeric"
-              />
-            ) : (
-              <Text style={[styles.value, !isAuthenticated && styles.placeholderText]}>
-                {formData.aadhar || "No Aadhar number provided"}
-              </Text>
-            )}
+          {/* Address Section */}
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="location-on" size={24} color="#2C2A7C" />
+            <Text style={styles.sectionTitle}>Address Details</Text>
           </View>
 
-          <View style={styles.documentGrid}>
-            <View style={styles.documentCard}>
-              {/* <MaterialIcons name="image" size={30} color="#A020F0" /> */}
-              <Text style={styles.docLabel}>Aadhar Front</Text>
-              {formData.aadharFrontImage ? (
-                <Image 
-                  source={{ uri: formData.aadharFrontImage }} 
-                  style={styles.documentImage} 
-                />
-              ) : (
-                <Text style={styles.uploadText}>Not uploaded</Text>
-              )}
-            </View>
-            <View style={styles.documentCard}>
-              {/* <MaterialIcons name="image" size={30} color="#A020F0" /> */}
-            <Text style={styles.docLabel}>Aadhar Back</Text>
-              {formData.aadharBackImage ? (
-                <Image 
-                  source={{ uri: formData.aadharBackImage }} 
-                  style={styles.documentImage} 
-                />
-              ) : (
-                <Text style={styles.uploadText}>Not uploaded</Text>
-              )}
+          <View style={styles.card}>
+            <View style={styles.cardContent}>
+              <View style={styles.iconContainer}>
+                <MaterialIcons name="home" size={24} color="#2C2A7C" />
+              </View>
+              <View style={styles.fieldContent}>
+                <Text style={styles.fieldLabel}>Residential Address</Text>
+                {editMode && isAuthenticated ? (
+                  <TextInput
+                    style={[styles.input, styles.multilineInput]}
+                    value={formData.address}
+                    onChangeText={(text) => handleInputChange('address', text)}
+                    placeholder="Enter your complete address"
+                    placeholderTextColor="#A0A0A0"
+                    multiline
+                    numberOfLines={3}
+                    editable={isAuthenticated}
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>
+                    {formData.address || "No address provided"}
+                  </Text>
+                )}
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          {isAuthenticated && (
-        <TouchableOpacity
-              style={[styles.button, { backgroundColor: editMode ? "#10B981" : "#A020F0" }]}
-          onPress={toggleEditMode}
-        >
-              <MaterialIcons 
-                name={editMode ? "check" : "edit"} 
-                size={20} 
-                color="#FFF" 
-                style={styles.buttonIcon} 
-              />
-              <Text style={styles.buttonText}>{editMode ? "Save Changes" : "Edit Profile"}</Text>
-        </TouchableOpacity>
-          )}
+          {/* Documents Section */}
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="description" size={24} color="#2C2A7C" />
+            <Text style={styles.sectionTitle}>Documents</Text>
+          </View>
 
-        <TouchableOpacity
-            style={[styles.button, styles.logoutButton]}
-          onPress={handleLogout}
-        >
-            <MaterialIcons name="logout" size={20} color="#FFF" style={styles.buttonIcon} />
-          <Text style={styles.buttonText}>Logout</Text>
-        </TouchableOpacity>
+          <View style={styles.card}>
+            <View style={styles.cardContent}>
+              <View style={styles.iconContainer}>
+                <MaterialIcons name="credit-card" size={24} color="#2C2A7C" />
+              </View>
+              <View style={styles.fieldContent}>
+                <Text style={styles.fieldLabel}>Aadhar Card Number</Text>
+                {editMode && isAuthenticated ? (
+                  <TextInput
+                    style={styles.input}
+                    value={formData.aadhar}
+                    onChangeText={(text) => handleInputChange('aadhar', text)}
+                    placeholder="Enter your 12-digit Aadhar number"
+                    placeholderTextColor="#A0A0A0"
+                    keyboardType="numeric"
+                    editable={isAuthenticated}
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>
+                    {formData.aadhar || "No Aadhar number provided"}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.documentsGrid}>
+            {[
+              ['Aadhar Card Front', 'aadharFrontImage'],
+              ['Aadhar Card Back', 'aadharBackImage']
+            ].map(([label, field]) => (
+              <View key={field} style={styles.documentCard}>
+                <Text style={styles.documentLabel}>{label}</Text>
+                {formData[field] ? (
+                  <Image
+                    source={{ uri: formData[field] }}
+                    style={styles.documentImage}
+                  />
+                ) : (
+                  <View style={styles.documentPlaceholder}>
+                    <MaterialIcons name="add-photo-alternate" size={32} color="#2C2A7C" />
+                    <Text style={styles.uploadText}>Upload Image</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+
+          {/* Logout Button */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="logout" size={24} color="#FF4C4C" style={styles.buttonIcon} />
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? 35 : 0,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: '#FFFFFF',
   },
   header: {
-    backgroundColor: "#A020F0",
-    paddingTop: 60,
-    paddingBottom: 30,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    backgroundColor: '#2C2A7C',
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingHorizontal: 20,
+    paddingBottom: 35,
+    borderBottomLeftRadius: 35,
+    borderBottomRightRadius: 35,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  headerContent: {
+    marginTop: 15,
+  },
+  profileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   profileImageContainer: {
-    alignItems: "center",
-    marginBottom: 16,
+    marginRight: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   profileImage: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 12,
-    borderWidth: 3,
-    borderColor: "#FFF",
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   profileImagePlaceholder: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "#FFF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   profileName: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#FFF",
-    marginBottom: 8,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 10,
+    letterSpacing: 0.5,
   },
   roleBadgeContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingVertical: 8,
+    borderRadius: 25,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  roleIcon: {
+    marginRight: 6,
   },
   roleBadge: {
-    color: "#FFF",
-    fontSize: 14,
-    fontWeight: "600",
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1,
   },
   contentContainer: {
     padding: 20,
   },
-  section: {
-    marginBottom: 24,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    marginTop: 10,
+    backgroundColor: '#F7F7FA',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E0E0FF',
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2C2A7C',
+    marginLeft: 12,
   },
-  infoSection: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 16,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     marginBottom: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    borderWidth: 1,
+    borderColor: '#F0F0F5',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#2C2A7C',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
-  labelContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
+  cardContent: {
+    flexDirection: 'row',
+    padding: 16,
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  icon: {
-    marginRight: 8,
+  iconContainer: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#F7F7FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0FF',
   },
-  label: {
-    fontSize: 14,
-    color: "#6B7280",
+  fieldContent: {
     flex: 1,
+    gap: 4,
   },
-  value: {
-    fontSize: 16,
-    color: "#111827",
-    fontWeight: "500",
+  fieldLabel: {
+    fontSize: 13,
+    color: '#666666',
+    marginBottom: 8,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
-    padding: 12,
     fontSize: 16,
-    color: "#111827",
-    backgroundColor: "#F9FAFB",
+    color: '#2C2A7C',
+    padding: 14,
+    backgroundColor: '#F7F7FA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0FF',
+    minHeight: 50,
   },
   multilineInput: {
-    height: 80,
+    height: 100,
     textAlignVertical: 'top',
+    paddingTop: 12,
   },
-  documentGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 12,
+  fieldValue: {
+    fontSize: 16,
+    color: '#2C2A7C',
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  documentsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    gap: 12,
   },
   documentCard: {
-    width: "48%",
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  docLabel: {
+  documentLabel: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginTop: 8,
-    marginBottom: 12,
+    color: '#666666',
+    marginBottom: 8,
+    fontWeight: '500',
   },
   documentImage: {
-    width: "100%",
-    height: 120,
-    borderRadius: 8,
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: '#F7F7FA',
+  },
+  documentPlaceholder: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: '#F7F7FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0FF',
+    borderStyle: 'dashed',
+    gap: 8,
   },
   uploadText: {
-    color: "#9CA3AF",
-    marginTop: 8,
+    color: '#2C2A7C',
     fontSize: 14,
+    fontWeight: '500',
   },
   buttonContainer: {
-    marginTop: 8,
+    marginTop: 32,
+    marginBottom: 32,
+    paddingHorizontal: 12,
   },
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#FFF0F0',
+    borderWidth: 1,
+    borderColor: '#FFE5E5',
+  },
+  logoutButtonText: {
+    color: '#FF4C4C',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   buttonIcon: {
     marginRight: 8,
   },
-  buttonText: {
-    color: "#FFF",
-    fontWeight: "600",
-    fontSize: 16,
+  quickActions: {
+    marginBottom: 25,
+    paddingHorizontal: 5,
   },
-  logoutButton: {
-    backgroundColor: "#DC2626",
-  },
-  placeholderText: {
-    color: "#9CA3AF",
-    fontStyle: "italic",
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
+  actionButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  editActionButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#2C2A7C',
+  },
+  saveActionButton: {
+    backgroundColor: '#2C2A7C',
+    borderColor: '#2C2A7C',
+  },
+  actionButtonText: {
+    marginLeft: 8,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2C2A7C',
+  },
+  saveActionButtonText: {
+    color: '#FFFFFF',
   },
 });

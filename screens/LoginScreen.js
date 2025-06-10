@@ -20,38 +20,8 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleResetPassword = async () => {
-    if (!emailOrPhone || !password) {
-      Alert.alert('Validation Error', 'Please enter Email/Phone and current password');
-      return;
-    }
-
-    const newPassword = 'NewPassword@123'; // TODO: Get this from user input later
-
-    try {
-      const response = await fetch('https://api.katsapp.com/api/reset/password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          identifier: emailOrPhone,
-          oldPassword: password,
-          newPassword: newPassword,
-        }),
-      });
-
-      const result = await response.text(); // Response might not be JSON
-
-      if (response.ok) {
-        Alert.alert('Success', 'Password changed successfully!');
-      } else {
-        Alert.alert('Reset Failed', result || 'Invalid credentials.');
-      }
-    } catch (error) {
-      console.error('Reset Password Error:', error);
-      Alert.alert('Error', 'Something went wrong while resetting the password.');
-    }
+  const handleResetPassword = () => {
+    navigation.navigate('ResetPassword');
   };
 
   const handleLogin = async () => {
@@ -140,7 +110,7 @@ export default function LoginScreen({ navigation }) {
             <MaterialIcons name="school" size={60} color="#FFF" />
           </View>
           <Text style={styles.headerTitle}>KATS Caretaker</Text>
-          <Text style={styles.headerSubtitle}>Welcome back!</Text>
+          <Text style={styles.headerSubtitle}>Welcome back! Please sign in to continue</Text>
         </View>
 
         <View style={styles.card}>
@@ -148,8 +118,8 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.label}>
               Email ID / Mobile No <Text style={styles.required}>*</Text>
             </Text>
-            <View style={styles.inputContainer}>
-              <MaterialIcons name="person" size={20} color="#A020F0" style={styles.inputIcon} />
+            <View style={[styles.inputContainer, emailOrPhone ? styles.inputContainerActive : null]}>
+              <MaterialIcons name="person" size={20} color="#2A2A72" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email or phone"
@@ -166,8 +136,8 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.label}>
               Password <Text style={styles.required}>*</Text>
             </Text>
-            <View style={styles.inputContainer}>
-              <MaterialIcons name="lock" size={20} color="#A020F0" style={styles.inputIcon} />
+            <View style={[styles.inputContainer, password ? styles.inputContainerActive : null]}>
+              <MaterialIcons name="lock" size={20} color="#2A2A72" style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { flex: 1 }]}
                 placeholder="Enter your password"
@@ -183,7 +153,7 @@ export default function LoginScreen({ navigation }) {
                 <MaterialIcons 
                   name={showPassword ? 'visibility-off' : 'visibility'} 
                   size={20} 
-                  color="#A020F0" 
+                  color="#2A2A72" 
                 />
               </TouchableOpacity>
             </View>
@@ -200,11 +170,18 @@ export default function LoginScreen({ navigation }) {
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
-              <MaterialIcons name="clear" size={20} color="#DC2626" />
+              <MaterialIcons name="clear" size={20} color="#6B7280" />
               <Text style={styles.clearButtonText}>Clear</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+            <TouchableOpacity 
+              style={[
+                styles.loginButton,
+                (!emailOrPhone || !password) && styles.loginButtonDisabled
+              ]} 
+              onPress={handleLogin}
+              disabled={!emailOrPhone || !password}
+            >
               <MaterialIcons name="login" size={20} color="#FFF" />
               <Text style={styles.loginButtonText}>Login</Text>
             </TouchableOpacity>
@@ -218,7 +195,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#A020F0',
+    backgroundColor: '#2A2A72',
   },
   scrollContainer: {
     flexGrow: 1,
@@ -233,21 +210,27 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFF',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   headerSubtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 20,
+    textAlign: 'center',
   },
   card: {
     backgroundColor: '#FFF',
@@ -269,6 +252,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
+    marginLeft: 4,
   },
   required: {
     color: '#DC2626',
@@ -276,18 +260,28 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
     paddingHorizontal: 12,
+    transition: 'all 0.3s',
+  },
+  inputContainerActive: {
+    borderColor: '#2A2A72',
+    backgroundColor: '#FFF',
+    shadowColor: '#2A2A72',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   inputIcon: {
     marginRight: 8,
   },
   input: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
     color: '#111827',
   },
@@ -298,9 +292,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 24,
+    paddingHorizontal: 4,
   },
   link: {
-    color: '#A020F0',
+    color: '#2A2A72',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -314,15 +309,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#DC2626',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 8,
+    backgroundColor: '#FFF',
   },
   clearButtonText: {
-    color: '#DC2626',
+    color: '#6B7280',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -331,16 +327,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#A020F0',
+    backgroundColor: '#2A2A72',
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#2A2A72',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 3.84,
     gap: 8,
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#A0AEC0',
+    elevation: 0,
+    shadowOpacity: 0,
   },
   loginButtonText: {
     color: '#FFF',
