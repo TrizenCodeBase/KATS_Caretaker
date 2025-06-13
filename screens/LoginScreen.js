@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,26 +9,44 @@ import {
   Alert,
   ScrollView,
   KeyboardAvoidingView,
-  Image,
+  ActivityIndicator,
+  SafeAreaView,
+  Dimensions,
 } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 
+const { width } = Dimensions.get('window');
+
 export default function LoginScreen({ navigation }) {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Create refs for the input fields
+  const emailInputRef = useRef(null);
+  const passwordInputRef = useRef(null);
 
   const handleResetPassword = () => {
     navigation.navigate('ResetPassword');
   };
 
   const handleLogin = async () => {
-    if (!emailOrPhone || !password) {
-      Alert.alert('Validation Error', 'Please enter both Email/Phone and Password');
+    // Trim the inputs
+    const trimmedEmail = emailOrPhone.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      Alert.alert(
+        'Validation Error', 
+        'Please enter both Email/Phone and Password'
+      );
       return;
     }
+
+    setIsLoading(true);
 
     try {
       const response = await fetch('https://api.katsapp.com/api/login', {
@@ -37,8 +55,8 @@ export default function LoginScreen({ navigation }) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          identifier: emailOrPhone,
-          password: password,
+          identifier: trimmedEmail,
+          password: trimmedPassword,
         }),
       });
 
@@ -52,24 +70,19 @@ export default function LoginScreen({ navigation }) {
         status: response.status
       });
 
-      if (response.ok) {
+      if (response.ok && data.token && data.user?.uuid) {
         try {
           // Store token with Bearer prefix
           const tokenWithBearer = `Bearer ${data.token}`;
           await AsyncStorage.setItem('authToken', tokenWithBearer);
+          await AsyncStorage.setItem('uuid', data.user.uuid);
           
-          // Store uuid from user object
-          if (data.user?.uuid) {
-            await AsyncStorage.setItem('uuid', data.user.uuid);
-            console.log('Stored credentials:', {
-              hasStoredToken: true,
-              hasStoredUuid: true,
-              storedUuid: data.user.uuid,
-              tokenPrefix: 'Bearer ' + data.token.substring(0, 10) + '...'
-            });
-          } else {
-            console.warn('UUID not found in user data');
-          }
+          console.log('Stored credentials:', {
+            hasStoredToken: true,
+            hasStoredUuid: true,
+            storedUuid: data.user.uuid,
+            tokenPrefix: 'Bearer ' + data.token.substring(0, 10) + '...'
+          });
 
           navigation.dispatch(
             CommonActions.reset({
@@ -80,156 +93,195 @@ export default function LoginScreen({ navigation }) {
         } catch (storageError) {
           console.error('Storage Error:', storageError);
           Alert.alert('Error', 'Failed to save login credentials. Please try again.');
-          return;
         }
       } else {
-        Alert.alert('Login Failed', data.message || 'Invalid credentials');
+        Alert.alert(
+          'Login Failed', 
+          data.message || 'Invalid credentials. Please check your email/phone and password.'
+        );
       }
     } catch (error) {
       console.error('Login Error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again later.');
+      Alert.alert(
+        'Error', 
+        'Unable to connect to the server. Please check your internet connection and try again.'
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleClear = () => {
     setEmailOrPhone('');
     setPassword('');
+    emailInputRef.current?.focus();
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
       >
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <MaterialIcons name="school" size={60} color="#FFF" />
-          </View>
-          <Text style={styles.headerTitle}>KATS Caretaker</Text>
-          <Text style={styles.headerSubtitle}>Welcome back! Please sign in to continue</Text>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Email ID / Mobile No <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={[styles.inputContainer, emailOrPhone ? styles.inputContainerActive : null]}>
-              <MaterialIcons name="person" size={20} color="#2A2A72" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email or phone"
-                value={emailOrPhone}
-                onChangeText={setEmailOrPhone}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor="#9CA3AF"
-              />
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <MaterialIcons name="school" size={40} color="#FFF" />
             </View>
+            <Text style={styles.headerTitle}>KATS Caretaker</Text>
+            <Text style={styles.headerSubtitle}>Welcome back! Please sign in to continue</Text>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Password <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={[styles.inputContainer, password ? styles.inputContainerActive : null]}>
-              <MaterialIcons name="lock" size={20} color="#2A2A72" style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Enter your password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                placeholderTextColor="#9CA3AF"
-              />
-              <TouchableOpacity 
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <MaterialIcons 
-                  name={showPassword ? 'visibility-off' : 'visibility'} 
-                  size={20} 
-                  color="#2A2A72" 
+          <View style={styles.card}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>
+                Email ID / Mobile No <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="person" size={20} color="#2A2A72" style={styles.inputIcon} />
+                <TextInput
+                  ref={emailInputRef}
+                  style={styles.input}
+                  placeholder="Enter your email or phone"
+                  value={emailOrPhone}
+                  onChangeText={setEmailOrPhone}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordInputRef.current?.focus()}
+                  blurOnSubmit={false}
+                  placeholderTextColor="#666"
+                  editable={!isLoading}
                 />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>
+                Password <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="lock" size={20} color="#2A2A72" style={styles.inputIcon} />
+                <TextInput
+                  ref={passwordInputRef}
+                  style={styles.input}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                  placeholderTextColor="#666"
+                  editable={!isLoading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeIcon}
+                  disabled={isLoading}
+                >
+                  <MaterialIcons 
+                    name={showPassword ? 'visibility-off' : 'visibility'} 
+                    size={20} 
+                    color="#2A2A72" 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.linksContainer}>
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('ForgotPassword')}
+                disabled={isLoading}
+              >
+                <Text style={styles.link}>Forgot Password?</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={handleResetPassword}
+                disabled={isLoading}
+              >
+                <Text style={styles.link}>Reset Password?</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity 
+                style={styles.clearButton} 
+                onPress={handleClear}
+                disabled={isLoading || (!emailOrPhone && !password)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="close" size={20} color="#666" />
+                <Text style={styles.clearButtonText}>Clear</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[
+                  styles.loginButton,
+                  (isLoading || !emailOrPhone || !password) && styles.loginButtonDisabled
+                ]} 
+                onPress={handleLogin}
+                disabled={isLoading || !emailOrPhone || !password}
+                activeOpacity={0.7}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <MaterialIcons name="login" size={20} color="#FFF" />
+                    <Text style={styles.loginButtonText}>Login</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>
-
-          <View style={styles.linksContainer}>
-            <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-              <Text style={styles.link}>Forgot Password?</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleResetPassword}>
-              <Text style={styles.link}>Reset Password?</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
-              <MaterialIcons name="clear" size={20} color="#6B7280" />
-              <Text style={styles.clearButtonText}>Clear</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[
-                styles.loginButton,
-                (!emailOrPhone || !password) && styles.loginButtonDisabled
-              ]} 
-              onPress={handleLogin}
-              disabled={!emailOrPhone || !password}
-            >
-              <MaterialIcons name="login" size={20} color="#FFF" />
-              <Text style={styles.loginButtonText}>Login</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#2A2A72',
   },
+  container: {
+    flex: 1,
+  },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
+    paddingTop: Platform.OS === 'ios' ? 80 : 60,
   },
   header: {
     alignItems: 'center',
-    paddingVertical: 40,
+    marginBottom: 30,
+    marginTop: 20,
     paddingHorizontal: 20,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    marginBottom: 16,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
     color: '#FFF',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 20,
     textAlign: 'center',
   },
   card: {
@@ -237,11 +289,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     padding: 24,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    paddingTop: 30,
+    marginTop: 20,
     flex: 1,
   },
   inputGroup: {
@@ -249,10 +298,9 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: '500',
+    color: '#2A2A72',
     marginBottom: 8,
-    marginLeft: 4,
   },
   required: {
     color: '#DC2626',
@@ -260,30 +308,21 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    transition: 'all 0.3s',
-  },
-  inputContainerActive: {
+    backgroundColor: '#FFF9E6',
+    borderRadius: 25,
+    borderWidth: 1,
     borderColor: '#2A2A72',
-    backgroundColor: '#FFF',
-    shadowColor: '#2A2A72',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    height: 50,
+    paddingHorizontal: 12,
   },
   inputIcon: {
     marginRight: 8,
   },
   input: {
     flex: 1,
-    paddingVertical: 14,
     fontSize: 16,
-    color: '#111827',
+    color: '#2A2A72',
+    height: '100%',
   },
   eyeIcon: {
     padding: 8,
@@ -292,35 +331,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 24,
-    paddingHorizontal: 4,
+    marginTop: 4,
   },
   link: {
     color: '#2A2A72',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
+    paddingHorizontal: 4,
   },
   clearButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 8,
     backgroundColor: '#FFF',
+    height: 48,
+    borderRadius: 25,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   clearButtonText: {
-    color: '#6B7280',
+    color: '#666',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   loginButton: {
     flex: 1,
@@ -328,24 +366,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2A2A72',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    elevation: 2,
-    shadowColor: '#2A2A72',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    height: 48,
+    borderRadius: 25,
     gap: 8,
   },
   loginButtonDisabled: {
-    backgroundColor: '#A0AEC0',
-    elevation: 0,
-    shadowOpacity: 0,
+    opacity: 0.7,
   },
   loginButtonText: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });

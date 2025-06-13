@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Image,
   Animated,
+  Linking,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Picker } from "@react-native-picker/picker";
@@ -25,6 +26,18 @@ import * as Location from 'expo-location';
 // Optional: import Geolocation and Camera library if integrating later
 // import Geolocation from '@react-native-community/geolocation';
 // import * as ImagePicker from 'expo-image-picker';
+
+// Helper function to convert attendance type to backend format
+const getAttendanceType = (type) => {
+  switch(type?.toLowerCase()) {
+    case 'home pickup': return 'homePickup';
+    case 'home drop': return 'homeDrop';
+    case 'institute pickup': return 'institutePickup';
+    case 'institute drop': return 'instituteDrop';
+    case 'absent': return 'absent';
+    default: return type?.toLowerCase() || '';
+  }
+};
 
 const RouteDetailsScreen = () => {
   const navigation = useNavigation();
@@ -203,6 +216,38 @@ const RouteDetailsScreen = () => {
     }
   };
 
+  // Add a function to fetch attendance data
+  const fetchAttendanceData = async (kidUuid, date) => {
+    try {
+      const storedToken = await AsyncStorage.getItem('authToken');
+      if (!storedToken) {
+        throw new Error('Authentication required');
+      }
+
+      const token = storedToken.startsWith('Bearer ') ? storedToken : `Bearer ${storedToken}`;
+      const formattedDate = date.toISOString().split('T')[0];
+
+      const response = await axios.get(
+        `https://api.katsapp.com/api/v1/kid-attendance/${kidUuid}/date/${formattedDate}`,
+        {
+          headers: {
+            'Authorization': token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        }
+      );
+
+      if (response.status === 200 && response.data) {
+        return response.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('Fetch attendance error:', error);
+      return null;
+    }
+  };
+
   const handleAttendanceSubmit = async () => {
     if (!attendanceData.type || !attendanceData.userProfileUuid) {
       Alert.alert('Error', 'Please fill in all required fields');
@@ -211,6 +256,8 @@ const RouteDetailsScreen = () => {
 
     try {
       setSubmitting(true);
+      
+      // Get stored token and uuid in parallel
       const [storedToken, storedUuid] = await Promise.all([
         AsyncStorage.getItem('authToken'),
         AsyncStorage.getItem('uuid')
@@ -232,98 +279,85 @@ const RouteDetailsScreen = () => {
       if (period === 'PM' && hour24 !== 12) hour24 += 12;
       if (period === 'AM' && hour24 === 12) hour24 = 0;
       
-      // Create ISO datetime string
       const pickupDateTime = new Date(formattedDate);
-      pickupDateTime.setHours(hour24);
-      pickupDateTime.setMinutes(parseInt(minutes));
+      pickupDateTime.setHours(hour24, parseInt(minutes));
       const pickupTimeISO = pickupDateTime.toISOString();
 
-      // Convert attendance type to camelCase format
-      const getAttendanceType = (type) => {
-        switch(type.toLowerCase()) {
-          case 'home pickup': return 'homePickup';
-          case 'home drop': return 'homeDrop';
-          case 'institute pickup': return 'institutePickup';
-          case 'institute drop': return 'instituteDrop';
-          default: return type.toLowerCase();
-        }
-      };
-
       // Create the request payload
-      const requestData = {
-        userProfileUuid: attendanceData.userProfileUuid,
-        date: formattedDate,
-        type: getAttendanceType(attendanceData.type),
-        latitude: parseFloat(attendanceData.latitude),
-        longitude: parseFloat(attendanceData.longitude),
-        PickupTime: pickupTimeISO
-      };
+      const requestData = new FormData();
+      requestData.append('userProfileUuid', attendanceData.userProfileUuid);
+      requestData.append('date', formattedDate);
+      requestData.append('type', getAttendanceType(attendanceData.type));
+      requestData.append('latitude', attendanceData.latitude || '');
+      requestData.append('longitude', attendanceData.longitude || '');
+      requestData.append('PickupTime', pickupTimeISO);
 
-      // If there's an image, add it to the request
-      if (attendanceData.image) {
-        const formData = new FormData();
-        const filename = attendanceData.image.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
-        
-        formData.append('image', {
-          uri: Platform.OS === 'ios' ? attendanceData.image.replace('file://', '') : attendanceData.image,
-          name: filename,
-          type
+      // If there's an image, append it to the FormData
+      if (attendanceData.imageInfo) {
+        requestData.append('photo', {
+          uri: attendanceData.imageInfo.uri,
+          type: attendanceData.imageInfo.type,
+          name: attendanceData.imageInfo.name,
         });
-
-        // First upload the image
-        const imageUploadResponse = await axios.post(
-          'https://api.katsapp.com/api/v1/upload',
-          formData,
-          {
-            headers: {
-              'Authorization': token,
-              'Content-Type': 'multipart/form-data',
-              'Accept': 'application/json'
-            }
-          }
-        );
-
-        if (imageUploadResponse.data && imageUploadResponse.data.url) {
-          requestData.photoUrl = imageUploadResponse.data.url;
-        }
       }
 
-      console.log('Submitting attendance with data:', requestData);
-
+      // Submit attendance
       const response = await axios.post(
         'https://api.katsapp.com/api/v1/kid-attendance',
         requestData,
         {
           headers: {
             'Authorization': token,
-            'Content-Type': 'application/json',
+            'Content-Type': 'multipart/form-data',
             'Accept': 'application/json'
           }
         }
       );
 
-      console.log('Attendance submission response:', {
-        status: response.status,
-        data: response.data
-      });
-
       if (response.status === 200 || response.status === 201) {
-        // Update attendance status for the selected kid
-        setAttendanceStatus(prev => ({
-          ...prev,
-          [selectedKidId]: {
-            type: attendanceData.type,
-            time: attendanceData.pickupTime,
-            date: formattedDate
+        // Fetch updated attendance data
+        const updatedAttendanceData = await fetchAttendanceData(selectedKid.uuid, currentDate);
+        
+        if (updatedAttendanceData) {
+          setAttendanceRecords([updatedAttendanceData]);
+          
+          // Update attendance status based on the most recent activity
+          const times = [
+            { type: 'Home Pickup', time: updatedAttendanceData.homePickup?.pickupTime },
+            { type: 'Home Drop', time: updatedAttendanceData.homeDrop?.dropTime },
+            { type: 'Institute Pickup', time: updatedAttendanceData.institutePickup?.pickupTime },
+            { type: 'Institute Drop', time: updatedAttendanceData.instituteDrop?.dropTime }
+          ].filter(item => item.time);
+
+          if (times.length > 0) {
+            // Sort by time to get the most recent activity
+            times.sort((a, b) => new Date(b.time) - new Date(a.time));
+            const mostRecent = times[0];
+            
+            setAttendanceStatus(prev => ({
+              ...prev,
+              [selectedKid.uuid]: {
+                type: mostRecent.type,
+                time: formatTime(mostRecent.time),
+                date: formattedDate
+              }
+            }));
           }
-        }));
+        }
 
         Alert.alert(
           'Success',
           'Attendance submitted successfully',
-          [{ text: 'OK', onPress: () => setShowAttendanceForm(false) }]
+          [{ text: 'OK', onPress: () => {
+            setShowAttendanceForm(false);
+            // Clear the form data
+            setAttendanceData(prev => ({
+              ...prev,
+              type: '',
+              image: null,
+              imageInfo: null
+            }));
+          }}]
         );
       } else {
         throw new Error('Failed to submit attendance');
@@ -332,13 +366,8 @@ const RouteDetailsScreen = () => {
     } catch (error) {
       console.error('Attendance submission error:', {
         message: error.message,
-        response: {
-          status: error.response?.status,
-          data: error.response?.data,
-          headers: error.response?.headers
-        },
-        request: error.request,
-        config: error.config
+        response: error.response?.data,
+        status: error.response?.status
       });
       
       let errorMessage = 'Failed to submit attendance. ';
@@ -406,12 +435,34 @@ const RouteDetailsScreen = () => {
   };
 
   const requestCameraPermission = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required to take photos.');
+    try {
+      const { status: existingStatus } = await ImagePicker.getCameraPermissionsAsync();
+      
+      if (existingStatus === 'granted') {
+        return true;
+      }
+
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission needed', 
+          'Camera permission is required to take photos. Please enable it in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Camera permission error:', {
+        message: error.message,
+        stack: error.stack
+      });
+      Alert.alert('Error', 'Failed to request camera permission. Please try again.');
       return false;
     }
-    return true;
   };
 
   const handleTakePhoto = async () => {
@@ -423,16 +474,36 @@ const RouteDetailsScreen = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.8
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets[0]) {
+        // Create a file name with timestamp to ensure uniqueness
+        const timestamp = new Date().getTime();
+        const uri = result.assets[0].uri;
+        const fileName = `photo_${timestamp}.jpg`;
+        
+        // Update attendance data with image info
         setAttendanceData(prev => ({
           ...prev,
-          image: result.assets[0].uri
+          image: uri,
+          imageInfo: {
+            uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+            type: 'image/jpeg',
+            name: fileName
+          }
         }));
+
+        console.log('Photo captured successfully:', {
+          uri: uri,
+          fileName: fileName
+        });
       }
     } catch (error) {
+      console.error('Photo capture error:', {
+        message: error.message,
+        stack: error.stack
+      });
       Alert.alert('Error', 'Failed to take photo. Please try again.');
     }
   };
@@ -479,7 +550,15 @@ const RouteDetailsScreen = () => {
         console.log('Raw API Response:', response.data);
         console.log('Response Status:', response.status);
 
-        if (response.status === 200 && response.data) {
+        // Check if we have any attendance records for this date
+        const hasAttendanceRecords = response.data && (
+          response.data.homePickup || 
+          response.data.homeDrop || 
+          response.data.institutePickup || 
+          response.data.instituteDrop
+        );
+
+        if (response.status === 200 && hasAttendanceRecords) {
           const attendanceData = response.data;
           console.log('Processed Attendance Data:', {
             kidName: attendanceData.kidName,
@@ -517,7 +596,7 @@ const RouteDetailsScreen = () => {
             }));
           }
         } else {
-          console.log('No attendance data found or invalid response');
+          console.log('No attendance data found for this date');
           setAttendanceRecords([]);
           setAttendanceStatus(prev => {
             const newStatus = { ...prev };
@@ -526,6 +605,18 @@ const RouteDetailsScreen = () => {
           });
         }
       } catch (error) {
+        // Silently handle 404 errors for no attendance records
+        if (error.response?.status === 404) {
+          console.log('No attendance records available for the selected date');
+          setAttendanceRecords([]);
+          setAttendanceStatus(prev => {
+            const newStatus = { ...prev };
+            delete newStatus[selectedKid.uuid];
+            return newStatus;
+          });
+          return; // Exit without showing error alert
+        }
+        
         console.error('Attendance fetch error:', {
           message: error.message,
           response: {
@@ -544,7 +635,10 @@ const RouteDetailsScreen = () => {
           errorMessage += error.message || 'Please try again.';
         }
         
-        Alert.alert('Error', errorMessage);
+        // Only show alert for non-404 errors
+        if (error.response?.status !== 404) {
+          Alert.alert('Error', errorMessage);
+        }
       } finally {
         setIsLoadingAttendance(false);
       }
@@ -594,6 +688,56 @@ const RouteDetailsScreen = () => {
       );
       return null;
     }
+  };
+
+  // Add this logging function
+  const logAttendanceDetails = (attendanceData) => {
+    if (!attendanceData) {
+      console.log('No attendance data available for today');
+      return;
+    }
+
+    console.log('\n=== Attendance Details ===');
+    console.log('Kid Name:', attendanceData.kidName);
+    console.log('Date:', new Date().toLocaleDateString());
+    
+    // Home Pickup
+    if (attendanceData.homePickup) {
+      console.log('\nHome Pickup:');
+      console.log('- Time:', formatTime(attendanceData.homePickup.pickupTime));
+      console.log('- Status:', attendanceData.homePickup.homeOnboard === "true" ? "Present" : "Absent");
+      console.log('- Location:', attendanceData.homePickup.latitude ? 
+        `${attendanceData.homePickup.latitude}, ${attendanceData.homePickup.longitude}` : 'No location');
+    }
+
+    // Institute Drop
+    if (attendanceData.instituteDrop) {
+      console.log('\nInstitute Drop:');
+      console.log('- Time:', formatTime(attendanceData.instituteDrop.dropTime));
+      console.log('- Status:', attendanceData.instituteDrop.instituteOffboard === "true" ? "Present" : "Absent");
+      console.log('- Location:', attendanceData.instituteDrop.latitude ? 
+        `${attendanceData.instituteDrop.latitude}, ${attendanceData.instituteDrop.longitude}` : 'No location');
+    }
+
+    // Institute Pickup
+    if (attendanceData.institutePickup) {
+      console.log('\nInstitute Pickup:');
+      console.log('- Time:', formatTime(attendanceData.institutePickup.pickupTime));
+      console.log('- Status:', attendanceData.institutePickup.instituteOnboard === "true" ? "Present" : "Absent");
+      console.log('- Location:', attendanceData.institutePickup.latitude ? 
+        `${attendanceData.institutePickup.latitude}, ${attendanceData.institutePickup.longitude}` : 'No location');
+    }
+
+    // Home Drop
+    if (attendanceData.homeDrop) {
+      console.log('\nHome Drop:');
+      console.log('- Time:', formatTime(attendanceData.homeDrop.dropTime));
+      console.log('- Status:', attendanceData.homeDrop.homeOffboard === "true" ? "Present" : "Absent");
+      console.log('- Location:', attendanceData.homeDrop.latitude ? 
+        `${attendanceData.homeDrop.latitude}, ${attendanceData.homeDrop.longitude}` : 'No location');
+    }
+
+    console.log('\n=== End of Attendance Details ===\n');
   };
 
   if (loading) {
@@ -729,7 +873,8 @@ const RouteDetailsScreen = () => {
                         const formattedDate = currentDate.toISOString().split('T')[0];
                         setSearchDate(currentDate);
                         
-                        console.log('Fetching attendance for:', {
+                        console.log('\nFetching attendance for:', {
+                          kidName: kid.name,
                           kidUuid: kid.uuid,
                           date: formattedDate
                         });
@@ -745,21 +890,13 @@ const RouteDetailsScreen = () => {
                           }
                         );
 
-                        console.log('Raw API Response:', response.data);
-                        console.log('Response Status:', response.status);
-
                         if (response.status === 200 && response.data) {
                           const attendanceData = response.data;
-                          console.log('Processed Attendance Data:', {
-                            kidName: attendanceData.kidName,
-                            hasHomePickup: !!attendanceData.homePickup,
-                            hasInstituteDrop: !!attendanceData.instituteDrop,
-                            hasInstitutePickup: !!attendanceData.institutePickup,
-                            hasHomeDrop: !!attendanceData.homeDrop
-                          });
-
                           setAttendanceRecords([attendanceData]);
                           
+                          // Log detailed attendance information
+                          logAttendanceDetails(attendanceData);
+
                           // Update attendance status based on the most recent activity
                           const times = [
                             { type: 'Home Pickup', time: attendanceData.homePickup?.pickupTime },
@@ -769,7 +906,6 @@ const RouteDetailsScreen = () => {
                           ].filter(item => item.time);
 
                           if (times.length > 0) {
-                            // Sort by time to get the most recent activity
                             times.sort((a, b) => new Date(b.time) - new Date(a.time));
                             const mostRecent = times[0];
                             
@@ -784,7 +920,7 @@ const RouteDetailsScreen = () => {
                             }));
                           }
                         } else {
-                          console.log('No attendance data found or invalid response');
+                          console.log('No attendance records found for today');
                           setAttendanceRecords([]);
                           setAttendanceStatus(prev => {
                             const newStatus = { ...prev };
@@ -793,6 +929,18 @@ const RouteDetailsScreen = () => {
                           });
                         }
                       } catch (error) {
+                        // Silently handle 404 errors for no attendance records
+                        if (error.response?.status === 404) {
+                          console.log('No attendance records available for the selected date');
+                          setAttendanceRecords([]);
+                          setAttendanceStatus(prev => {
+                            const newStatus = { ...prev };
+                            delete newStatus[kid.uuid];
+                            return newStatus;
+                          });
+                          return; // Exit without showing error alert
+                        }
+                        
                         console.error('Attendance fetch error:', {
                           message: error.message,
                           response: {
@@ -801,25 +949,18 @@ const RouteDetailsScreen = () => {
                           }
                         });
                         
-                        if (error.response?.status === 404) {
-                          // Clear attendance records if none found
-                          setAttendanceRecords([]);
-                          setAttendanceStatus(prev => {
-                            const newStatus = { ...prev };
-                            delete newStatus[kid.uuid];
-                            return newStatus;
-                          });
+                        let errorMessage = 'Failed to fetch attendance records. ';
+                        if (error.response?.status === 401) {
+                          errorMessage += 'Please login again.';
+                          AsyncStorage.multiRemove(['authToken', 'uuid'])
+                            .then(() => navigation.navigate('Login'))
+                            .catch(clearError => console.error('Failed to clear credentials:', clearError));
                         } else {
-                          let errorMessage = 'Failed to fetch attendance records. ';
-                          if (error.response?.status === 401) {
-                            errorMessage += 'Please login again.';
-                            AsyncStorage.multiRemove(['authToken', 'uuid'])
-                              .then(() => navigation.navigate('Login'))
-                              .catch(clearError => console.error('Failed to clear credentials:', clearError));
-                          } else {
-                            errorMessage += error.message || 'Please try again.';
-                          }
-                          
+                          errorMessage += error.message || 'Please try again.';
+                        }
+                        
+                        // Only show alert for non-404 errors
+                        if (error.response?.status !== 404) {
                           Alert.alert('Error', errorMessage);
                         }
                       } finally {
@@ -829,11 +970,12 @@ const RouteDetailsScreen = () => {
                       setSelectedKid(null);
                       setAttendanceRecords([]);
                       setAttendanceStatus({});
+                      console.log('Kid selection cleared');
                     }
                   }}
                   dropdownIconColor="#FFFFFF"
                 >
-                  <Picker.Item label="-- Select a Student --" value={null} color="#9CA3AF" style={{color: '#9CA3AF'}}/>
+                  <Picker.Item label="-- Select a Kid --" value={null} color="#9CA3AF" style={{color: '#9CA3AF'}}/>
                   {(routeDetails?.students || []).map((student) => (
                     <Picker.Item 
                       key={student.uuid} 
@@ -911,7 +1053,17 @@ const RouteDetailsScreen = () => {
                   </View>
 
                   {/* Attendance Records Section */}
-                  {attendanceRecords && attendanceRecords.length > 0 ? (
+                  {isLoadingAttendance ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color="#2A2A72" />
+                      <Text style={styles.loadingText}>Loading attendance records...</Text>
+                    </View>
+                  ) : attendanceRecords && attendanceRecords.length > 0 && (
+                    attendanceRecords[0].homePickup || 
+                    attendanceRecords[0].homeDrop || 
+                    attendanceRecords[0].institutePickup || 
+                    attendanceRecords[0].instituteDrop
+                  ) ? (
                     <View style={styles.attendanceRecordsContainer}>
                       <Text style={styles.attendanceDate}>
                         Attendance for {searchDate.toLocaleDateString()}
@@ -1036,8 +1188,10 @@ const RouteDetailsScreen = () => {
                     </View>
                   ) : (
                     <View style={styles.noRecordsContainer}>
-                      <MaterialIcons name="error-outline" size={24} color="#6B7280" />
-                      <Text style={styles.noRecordsText}>No attendance records found for this date</Text>
+                      <MaterialIcons name="event-busy" size={24} color="#6B7280" />
+                      <Text style={styles.noRecordsText}>
+                        No attendance records found for {searchDate.toLocaleDateString()}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -1720,6 +1874,17 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: '#2A2A72',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    color: '#6B7280',
     fontSize: 14,
     fontWeight: '500',
   },
