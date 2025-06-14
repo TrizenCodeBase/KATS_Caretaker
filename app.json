@@ -1,31 +1,35 @@
 {
   "expo": {
-    "name": "app-name",
-    "slug": "app-name",
+    "name": "KATS",
+    "slug": "kats",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./kats_logo.png",
     "userInterfaceStyle": "light",
     "jsEngine": "hermes",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./kats_logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kats.caretaker"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./kats_logo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.appname"
+      "package": "com.kats.caretaker"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./kats_logo.png"
     }
   }
 }

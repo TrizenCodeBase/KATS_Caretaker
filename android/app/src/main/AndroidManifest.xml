@@ -23,6 +23,22 @@
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
+      <!-- Deep linking intent filter -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="kats"/>
+      </intent-filter>
+      <!-- Additional intent filter for specific paths -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="kats" android:host="forgot-password"/>
+        <data android:scheme="kats" android:host="login"/>
+        <data android:scheme="kats" android:host="reset-password"/>
+      </intent-filter>
     </activity>
   </application>
 </manifest>
